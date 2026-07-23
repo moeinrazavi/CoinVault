@@ -7,6 +7,7 @@ root = Path(SPECPATH)
 
 APP_NAME = "CoinVault"
 BUNDLE_ID = "com.coinvault.app"
+ICON_PATH = root / "assets" / "AppIcon.icns"
 
 a = Analysis(
     [str(root / "main.py")],
@@ -67,7 +68,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f"{APP_NAME}.app",
-    icon=None,
+    icon=str(ICON_PATH) if ICON_PATH.exists() else None,
     bundle_identifier=BUNDLE_ID,
     info_plist={
         "CFBundleName": APP_NAME,
