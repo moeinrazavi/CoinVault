@@ -25,7 +25,13 @@ ROM_EXTENSIONS = {
     ".a9", ".y12", ".z12", ".a12", ".f13", ".j13", ".k13", ".zip", ".7z",
     ".nv", ".key", ".dat", ".hex", ".s19", ".pal", ".pld", ".bprom",
 }
-MAME_LOCATION_SUFFIX = re.compile(r"^\d*[a-z]+\d*$", re.IGNORECASE)
+MAME_LOCATION_SUFFIX = re.compile(r"^[a-z0-9]{1,8}$", re.IGNORECASE)
+NON_ROM_EXTENSIONS = {
+    "txt", "pdf", "png", "jpg", "jpeg", "gif", "bmp", "md", "nfo", "exe",
+    "dll", "so", "dylib", "html", "htm", "url", "dmg", "doc", "rtf", "xml",
+    "json", "lua", "py", "sh", "bat", "cmd", "log", "cue", "m3u", "wav",
+    "mp3", "flac", "avi", "mkv", "mp4", "rar", "gz", "bz2", "xz", "tar",
+}
 SKIP_FILE_NAMES = {".ds_store", "thumbs.db", "desktop.ini", "readme.txt", "readme"}
 SKIP_DIR_NAMES = {
     ".venv",
@@ -74,9 +80,11 @@ def is_rom_file(path: Path) -> bool:
     }:
         return True
 
-    # MAME PCB location labels like 064e01.2f, 064e11.12k, 064eab04.10e
-    if len(stem_parts) >= 2 and MAME_LOCATION_SUFFIX.match(stem_parts[-1]):
-        return True
+    # MAME PCB location labels like 064e01.2f, epr-12010.43, epr-11264.95
+    if len(stem_parts) >= 2:
+        label = stem_parts[-1]
+        if label not in NON_ROM_EXTENSIONS and MAME_LOCATION_SUFFIX.match(label):
+            return True
 
     return False
 
