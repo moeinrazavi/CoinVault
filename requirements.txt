@@ -1,0 +1,4 @@
+pynput>=1.7.6
+pyobjc-framework-Cocoa>=10.0
+Pillow>=10.0.0
+pyinstaller>=6.0.0

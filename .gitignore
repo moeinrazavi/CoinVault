@@ -1,0 +1,36 @@
+.venv/
+mame_home/
+roms/
+saves/
+cfg/
+ArcadeSave Library/
+CoinVault Library/
+build/
+dist/
+dmg-staging/
+__pycache__/
+*.pyc
+*.dmg
+.DS_Store
+
+# Loose ROM files in project root
+*.f1
+*.h1
+*.j1
+*.k1
+*.f3
+*.h3
+*.j3
+*.k3
+*.v7
+*.j13
+*.k13
+*.y6
+*.z6
+*.y9
+*.z9
+*.a9
+*.y12
+*.z12
+*.a12
+*.f13

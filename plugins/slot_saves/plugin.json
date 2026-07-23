@@ -1,0 +1,10 @@
+{
+	"plugin": {
+		"name": "slot_saves",
+		"description": "OpenEmu-style rotating save slots (Cmd+S save, Cmd+L load)",
+		"version": "1.0.0",
+		"author": "robocop2j-emulator",
+		"type": "plugin",
+		"start": "false"
+	}
+}
