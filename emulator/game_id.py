@@ -23,7 +23,10 @@ ROM_EXTENSIONS = {
     ".bin", ".rom", ".f1", ".f3", ".h1", ".h3", ".j1", ".j3", ".k1", ".k3",
     ".v7", ".y1", ".z1", ".a1", ".y4", ".z4", ".y6", ".z6", ".y9", ".z9",
     ".a9", ".y12", ".z12", ".a12", ".f13", ".j13", ".k13", ".zip", ".7z",
+    ".nv", ".key", ".dat", ".hex", ".s19", ".pal", ".pld", ".bprom",
 }
+MAME_LOCATION_SUFFIX = re.compile(r"^\d*[a-z]+\d*$", re.IGNORECASE)
+SKIP_FILE_NAMES = {".ds_store", "thumbs.db", "desktop.ini", "readme.txt", "readme"}
 SKIP_DIR_NAMES = {
     ".venv",
     ".git",
@@ -56,9 +59,13 @@ def is_rom_file(path: Path) -> bool:
         return False
     if path.name.startswith("."):
         return False
+    if path.name.lower() in SKIP_FILE_NAMES:
+        return False
+
     suffix = path.suffix.lower()
     if suffix in ROM_EXTENSIONS:
         return True
+
     stem_parts = path.name.lower().split(".")
     if len(stem_parts) >= 2 and stem_parts[-1] in {
         "f1", "h1", "j1", "k1", "f3", "h3", "j3", "k3", "v7", "y1", "z1",
@@ -66,6 +73,11 @@ def is_rom_file(path: Path) -> bool:
         "f13", "j13", "k13",
     }:
         return True
+
+    # MAME PCB location labels like 064e01.2f, 064e11.12k, 064eab04.10e
+    if len(stem_parts) >= 2 and MAME_LOCATION_SUFFIX.match(stem_parts[-1]):
+        return True
+
     return False
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 import AppKit
 import Foundation
 import objc
+from PyObjCTools import AppHelper
 
 from emulator.controller import ensure_controller_ready
 from emulator.controller_editor import show_controller_editor
@@ -421,18 +422,12 @@ class AppDelegate(AppKit.NSObject):
     def _import_worker(self, folder: Path) -> None:
         try:
             def progress(message: str) -> None:
-                AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(
-                    lambda: self.updateStatusMessage_(message)
-                )
+                AppHelper.callAfter(self.updateStatusMessage_, message)
 
             entry = self.library.add_game_from_folder(folder, progress=progress)
-            AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(
-                lambda: self._import_finished(entry, None)
-            )
+            AppHelper.callAfter(self._import_finished, entry, None)
         except Exception as exc:
-            AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(
-                lambda: self._import_finished(None, exc)
-            )
+            AppHelper.callAfter(self._import_finished, None, exc)
 
     @objc.python_method
     def _import_finished(self, entry: GameEntry | None, error: Exception | None) -> None:
@@ -468,9 +463,7 @@ class AppDelegate(AppKit.NSObject):
             message = f"Launch failed: {exc}"
             _log(traceback.format_exc())
 
-        AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(
-            lambda: self.updateStatusMessage_(message)
-        )
+        AppHelper.callAfter(self.updateStatusMessage_, message)
 
     def openControls_(self, sender) -> None:
         if self.controller_editor is None:
