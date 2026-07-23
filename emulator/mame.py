@@ -95,11 +95,39 @@ def get_game_info(game_id: str) -> dict[str, str]:
     }
 
 
-def verify_game(game_id: str, rompath: Path) -> tuple[bool, str]:
-    result = run_mame([game_id, "-rompath", str(rompath), "-verifyroms"])
-    output = f"{result.stdout}\n{result.stderr}"
+def verify_game(game_id: str, rompath: Path) -> tuple[bool, str, str]:
+    rompath_arg = build_rompath(rompath)
+    result = run_mame([game_id, "-rompath", rompath_arg, "-verifyroms"])
+    output = f"{result.stdout}\n{result.stderr}".strip()
     if "is good" in output:
-        return True, "ROM set verified"
-    if "is bad" in output:
-        return False, "ROM set verification failed"
-    return False, output.strip() or "Unable to verify ROM set"
+        return True, "ROM set verified", output
+    if "is bad" in output or "NOT FOUND" in output or "INCORRECT" in output:
+        return False, "ROM set verification failed", output
+    return False, output or "Unable to verify ROM set", output
+
+
+def build_rompath(*paths: Path) -> str:
+    """Build a MAME rompath search list from library paths and bundled ROMs."""
+    entries: list[str] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        resolved = str(path.resolve())
+        if resolved not in seen and path.exists():
+            seen.add(resolved)
+            entries.append(resolved)
+
+    for path in paths:
+        add(path)
+
+    paths_info = find_mame_paths()
+    for candidate in (
+        paths_info.homepath / "roms",
+        paths_info.homepath / "share" / "mame" / "roms",
+        Path.home() / ".mame" / "roms",
+    ):
+        add(candidate)
+
+    if not entries:
+        raise RuntimeError("No ROM path available for MAME")
+    return ";".join(entries)

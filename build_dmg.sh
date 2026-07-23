@@ -75,7 +75,7 @@ else:
             temp_path = Path(temp_dir)
             for rom in rom_files:
                 shutil.copy2(rom, temp_path / rom.name)
-            entry = library.add_game_from_folder(temp_path)
+            entry, _warning = library.add_game_from_folder(temp_path)
             print(f"Seeded {entry.title}")
 PY
 fi

@@ -33,6 +33,9 @@ class GameTileView(AppKit.NSView):
     on_activate = objc.ivar("on_activate")
     on_select = objc.ivar("on_select")
     selected = objc.ivar("selected")
+    image_view = objc.ivar("image_view")
+    title_label = objc.ivar("title_label")
+    subtitle_label = objc.ivar("subtitle_label")
 
     def initWithFrame_entry_callback_select_(self, frame, entry, callback, select):
         self = objc.super(GameTileView, self).initWithFrame_(frame)
@@ -46,34 +49,47 @@ class GameTileView(AppKit.NSView):
         self.setWantsLayer_(True)
         self._apply_style()
 
-        image_view = AppKit.NSImageView.alloc().initWithFrame_(
-            Foundation.NSMakeRect(12, 36, 136, 136)
+        tile_width = frame.size.width
+        image_size = max(96, tile_width - 24)
+        image_y = 34
+
+        self.image_view = AppKit.NSImageView.alloc().initWithFrame_(
+            Foundation.NSMakeRect(
+                (tile_width - image_size) / 2,
+                image_y,
+                image_size,
+                image_size,
+            )
         )
-        image_view.setImageScaling_(AppKit.NSImageScaleProportionallyUpOrDown)
+        self.image_view.setImageScaling_(AppKit.NSImageScaleProportionallyUpOrDown)
         image = AppKit.NSImage.alloc().initWithContentsOfFile_(
             str(entry.icon_path)
         )
         if image is not None:
-            image_view.setImage_(image)
+            self.image_view.setImage_(image)
         else:
-            image_view.setImage_(AppKit.NSImage.imageNamed_("NSApplicationIcon"))
-        self.addSubview_(image_view)
+            self.image_view.setImage_(AppKit.NSImage.imageNamed_("NSApplicationIcon"))
+        self.addSubview_(self.image_view)
 
-        title = AppKit.NSTextField.labelWithString_(entry.title)
-        title.setFrame_(Foundation.NSMakeRect(8, 14, 144, 18))
-        title.setFont_(AppKit.NSFont.boldSystemFontOfSize_(11))
-        title.setAlignment_(AppKit.NSTextAlignmentCenter)
-        title.setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
-        self.addSubview_(title)
+        self.title_label = AppKit.NSTextField.labelWithString_(entry.title)
+        self.title_label.setFrame_(
+            Foundation.NSMakeRect(8, 14, tile_width - 16, 18)
+        )
+        self.title_label.setFont_(AppKit.NSFont.boldSystemFontOfSize_(11))
+        self.title_label.setAlignment_(AppKit.NSTextAlignmentCenter)
+        self.title_label.setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
+        self.addSubview_(self.title_label)
 
-        subtitle = AppKit.NSTextField.labelWithString_(
+        self.subtitle_label = AppKit.NSTextField.labelWithString_(
             entry.year or entry.manufacturer or entry.id
         )
-        subtitle.setFrame_(Foundation.NSMakeRect(8, 2, 144, 14))
-        subtitle.setFont_(AppKit.NSFont.systemFontOfSize_(10))
-        subtitle.setTextColor_(AppKit.NSColor.secondaryLabelColor())
-        subtitle.setAlignment_(AppKit.NSTextAlignmentCenter)
-        self.addSubview_(subtitle)
+        self.subtitle_label.setFrame_(
+            Foundation.NSMakeRect(8, 2, tile_width - 16, 14)
+        )
+        self.subtitle_label.setFont_(AppKit.NSFont.systemFontOfSize_(10))
+        self.subtitle_label.setTextColor_(AppKit.NSColor.secondaryLabelColor())
+        self.subtitle_label.setAlignment_(AppKit.NSTextAlignmentCenter)
+        self.addSubview_(self.subtitle_label)
         return self
 
     @objc.python_method
@@ -199,8 +215,13 @@ class DropView(AppKit.NSView):
 
 class AppDelegate(AppKit.NSObject):
     window = objc.ivar("window")
+    content_view = objc.ivar("content_view")
+    toolbar = objc.ivar("toolbar")
+    drop_view = objc.ivar("drop_view")
+    library_scroll = objc.ivar("library_scroll")
     status_label = objc.ivar("status_label")
     grid_view = objc.ivar("grid_view")
+    empty_label = objc.ivar("empty_label")
     library = objc.ivar("library")
     launch_thread = objc.ivar("launch_thread")
     selected_entry = objc.ivar("selected_entry")
@@ -215,6 +236,7 @@ class AppDelegate(AppKit.NSObject):
         self.selected_entry = None
         self.tile_views = []
         self.controller_editor = None
+        self.empty_label = None
 
         self._build_menu_bar()
 
@@ -230,28 +252,27 @@ class AppDelegate(AppKit.NSObject):
         self.window.setTitle_(APP_NAME)
         self.window.center()
         self.window.setMinSize_(Foundation.NSMakeSize(720, 560))
+        self.window.setDelegate_(self)
 
-        content = AppKit.NSView.alloc().initWithFrame_(
+        self.content_view = AppKit.NSView.alloc().initWithFrame_(
             Foundation.NSMakeRect(0, 0, 920, 680)
         )
-        self.window.setContentView_(content)
+        self.window.setContentView_(self.content_view)
 
-        toolbar = AppKit.NSView.alloc().initWithFrame_(
-            Foundation.NSMakeRect(0, 600, 920, 80)
-        )
-        toolbar.setWantsLayer_(True)
-        toolbar.layer().setBackgroundColor_(
+        self.toolbar = AppKit.NSView.alloc().initWithFrame_(Foundation.NSMakeRect(0, 0, 920, 80))
+        self.toolbar.setWantsLayer_(True)
+        self.toolbar.layer().setBackgroundColor_(
             AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
                 0.10, 0.12, 0.16, 1.0
             ).CGColor()
         )
-        content.addSubview_(toolbar)
+        self.content_view.addSubview_(self.toolbar)
 
         title = AppKit.NSTextField.labelWithString_("Your Arcade Library")
         title.setFrame_(Foundation.NSMakeRect(24, 28, 400, 28))
         title.setFont_(AppKit.NSFont.boldSystemFontOfSize_(24))
         title.setTextColor_(AppKit.NSColor.labelColor())
-        toolbar.addSubview_(title)
+        self.toolbar.addSubview_(title)
 
         setup_button = AppKit.NSButton.alloc().initWithFrame_(
             Foundation.NSMakeRect(620, 22, 160, 32)
@@ -260,7 +281,7 @@ class AppDelegate(AppKit.NSObject):
         setup_button.setBezelStyle_(AppKit.NSBezelStyleRounded)
         setup_button.setTarget_(self)
         setup_button.setAction_("openControls:")
-        toolbar.addSubview_(setup_button)
+        self.toolbar.addSubview_(setup_button)
 
         remove_button = AppKit.NSButton.alloc().initWithFrame_(
             Foundation.NSMakeRect(792, 22, 104, 32)
@@ -269,32 +290,34 @@ class AppDelegate(AppKit.NSObject):
         remove_button.setBezelStyle_(AppKit.NSBezelStyleRounded)
         remove_button.setTarget_(self)
         remove_button.setAction_("removeSelected:")
-        toolbar.addSubview_(remove_button)
+        self.toolbar.addSubview_(remove_button)
 
         self.status_label = AppKit.NSTextField.labelWithString_("Ready")
-        self.status_label.setFrame_(Foundation.NSMakeRect(24, 24, 760, 20))
         self.status_label.setTextColor_(AppKit.NSColor.secondaryLabelColor())
-        content.addSubview_(self.status_label)
+        self.content_view.addSubview_(self.status_label)
 
-        drop_view = DropView.alloc().initWithFrame_callback_(
-            Foundation.NSMakeRect(24, 470, 872, 108),
+        self.drop_view = DropView.alloc().initWithFrame_callback_(
+            Foundation.NSMakeRect(0, 0, 872, 108),
             self.import_folder_,
         )
-        content.addSubview_(drop_view)
+        self.content_view.addSubview_(self.drop_view)
 
-        scroll = AppKit.NSScrollView.alloc().initWithFrame_(
-            Foundation.NSMakeRect(24, 56, 872, 400)
+        self.library_scroll = AppKit.NSScrollView.alloc().initWithFrame_(
+            Foundation.NSMakeRect(0, 0, 872, 400)
         )
-        scroll.setHasVerticalScroller_(True)
-        scroll.setDrawsBackground_(False)
-        scroll.setBorderType_(AppKit.NSNoBorder)
+        self.library_scroll.setHasVerticalScroller_(True)
+        self.library_scroll.setHasHorizontalScroller_(False)
+        self.library_scroll.setAutohidesScrollers_(True)
+        self.library_scroll.setDrawsBackground_(False)
+        self.library_scroll.setBorderType_(AppKit.NSNoBorder)
 
         self.grid_view = AppKit.NSView.alloc().initWithFrame_(
             Foundation.NSMakeRect(0, 0, 840, 400)
         )
-        scroll.setDocumentView_(self.grid_view)
-        content.addSubview_(scroll)
+        self.library_scroll.setDocumentView_(self.grid_view)
+        self.content_view.addSubview_(self.library_scroll)
 
+        self._layout_ui_()
         self.window.makeKeyAndOrderFront_(None)
         AppKit.NSApp.activateIgnoringOtherApps_(True)
         self.reload_library_()
@@ -356,40 +379,140 @@ class AppDelegate(AppKit.NSObject):
         AppKit.NSApp.setMainMenu_(main_menu)
 
     @objc.python_method
+    def _layout_ui_(self) -> None:
+        bounds = self.content_view.bounds()
+        width = bounds.size.width
+        height = bounds.size.height
+        margin = 24
+        toolbar_height = 80
+        drop_height = 108
+        status_height = 22
+        section_gap = 12
+
+        self.toolbar.setFrame_(
+            Foundation.NSMakeRect(0, height - toolbar_height, width, toolbar_height)
+        )
+
+        toolbar_buttons = self.toolbar.subviews()
+        if len(toolbar_buttons) >= 3:
+            setup_button = toolbar_buttons[1]
+            remove_button = toolbar_buttons[2]
+            remove_button.setFrame_(
+                Foundation.NSMakeRect(max(width - margin - 104, 680), 22, 104, 32)
+            )
+            setup_button.setFrame_(
+                Foundation.NSMakeRect(max(width - margin - 272, 520), 22, 160, 32)
+            )
+
+        drop_y = height - toolbar_height - section_gap - drop_height
+        self.drop_view.setFrame_(
+            Foundation.NSMakeRect(margin, drop_y, width - (margin * 2), drop_height)
+        )
+
+        for subview in self.drop_view.subviews():
+            if isinstance(subview, AppKit.NSTextField):
+                frame = subview.frame()
+                subview.setFrame_(
+                    Foundation.NSMakeRect(
+                        20,
+                        frame.origin.y,
+                        self.drop_view.frame().size.width - 40,
+                        frame.size.height,
+                    )
+                )
+
+        self.status_label.setFrame_(
+            Foundation.NSMakeRect(margin, 16, width - (margin * 2), status_height)
+        )
+
+        scroll_y = 16 + status_height + section_gap
+        scroll_height = max(
+            160,
+            drop_y - scroll_y - section_gap,
+        )
+        self.library_scroll.setFrame_(
+            Foundation.NSMakeRect(
+                margin,
+                scroll_y,
+                width - (margin * 2),
+                scroll_height,
+            )
+        )
+
+    @objc.python_method
+    def _grid_metrics(self) -> tuple[int, int, int, int, float]:
+        viewport_width = self.library_scroll.contentSize().width
+        if viewport_width < 120:
+            viewport_width = self.library_scroll.frame().size.width
+        padding = 16
+        min_tile = 148
+        max_tile = 188
+        columns = max(1, int((viewport_width - padding) // (min_tile + padding)))
+        tile_width = int((viewport_width - padding * (columns + 1)) / columns)
+        tile_width = max(min_tile, min(tile_width, max_tile))
+        tile_height = int(tile_width * 1.18)
+        return columns, tile_width, tile_height, padding, viewport_width
+
+    def windowDidResize_(self, notification) -> None:
+        self._layout_ui_()
+        self._layout_library_grid_()
+
+    @objc.python_method
     def updateStatusMessage_(self, message) -> None:
         self.status_label.setStringValue_(message)
 
     @objc.python_method
     def reload_library_(self) -> None:
+        self._layout_ui_()
+        self._layout_library_grid_()
+
+    @objc.python_method
+    def _layout_library_grid_(self) -> None:
         for subview in list(self.grid_view.subviews()):
             subview.removeFromSuperview()
+        if self.empty_label is not None:
+            self.empty_label.removeFromSuperview()
+            self.empty_label = None
 
         games = self.library.list_games()
         self.tile_views = []
-        columns = 5
-        tile_width = 160
-        tile_height = 190
-        padding = 16
-
-        rows = max(1, (len(games) + columns - 1) // columns)
-        height = rows * (tile_height + padding) + padding
-        self.grid_view.setFrameSize_(Foundation.NSMakeSize(840, max(height, 400)))
+        columns, tile_width, tile_height, padding, viewport_width = self._grid_metrics()
+        viewport_height = self.library_scroll.contentSize().height
+        if viewport_height < 120:
+            viewport_height = self.library_scroll.frame().size.height
 
         if not games:
-            empty = AppKit.NSTextField.labelWithString_(
+            self.empty_label = AppKit.NSTextField.labelWithString_(
                 "No games yet. Drag a ROM folder into the drop zone above."
             )
-            empty.setFrame_(Foundation.NSMakeRect(180, 180, 480, 24))
-            empty.setAlignment_(AppKit.NSTextAlignmentCenter)
-            empty.setTextColor_(AppKit.NSColor.secondaryLabelColor())
-            self.grid_view.addSubview_(empty)
+            self.empty_label.setAlignment_(AppKit.NSTextAlignmentCenter)
+            self.empty_label.setTextColor_(AppKit.NSColor.secondaryLabelColor())
+            self.empty_label.setFrame_(
+                Foundation.NSMakeRect(
+                    0,
+                    max(0, (viewport_height - 24) / 2),
+                    viewport_width,
+                    24,
+                )
+            )
+            self.grid_view.addSubview_(self.empty_label)
+            self.grid_view.setFrameSize_(
+                Foundation.NSMakeSize(viewport_width, max(viewport_height, 220))
+            )
             return
+
+        rows = max(1, (len(games) + columns - 1) // columns)
+        content_height = rows * (tile_height + padding) + padding
+        content_height = max(content_height, viewport_height)
+        self.grid_view.setFrameSize_(
+            Foundation.NSMakeSize(viewport_width, content_height)
+        )
 
         for index, entry in enumerate(games):
             row = index // columns
             col = index % columns
             x = padding + col * (tile_width + padding)
-            y = height - padding - (row + 1) * (tile_height + padding)
+            y = content_height - padding - (row + 1) * (tile_height + padding)
             tile = GameTileView.alloc().initWithFrame_entry_callback_select_(
                 Foundation.NSMakeRect(x, y, tile_width, tile_height),
                 entry,
@@ -462,13 +585,18 @@ class AppDelegate(AppKit.NSObject):
             def progress(message: str) -> None:
                 AppHelper.callAfter(self.updateStatusMessage_, message)
 
-            entry = self.library.add_game_from_folder(folder, progress=progress)
-            AppHelper.callAfter(self._import_finished, entry, None)
+            entry, warning = self.library.add_game_from_folder(folder, progress=progress)
+            AppHelper.callAfter(self._import_finished, entry, None, warning)
         except Exception as exc:
-            AppHelper.callAfter(self._import_finished, None, exc)
+            AppHelper.callAfter(self._import_finished, None, exc, None)
 
     @objc.python_method
-    def _import_finished(self, entry: GameEntry | None, error: Exception | None) -> None:
+    def _import_finished(
+        self,
+        entry: GameEntry | None,
+        error: Exception | None,
+        warning: str | None,
+    ) -> None:
         if error is not None:
             self._show_error("Import Failed", str(error))
             self.updateStatusMessage_("Import failed")
@@ -476,7 +604,11 @@ class AppDelegate(AppKit.NSObject):
             return
 
         self.reload_library_()
-        self.updateStatusMessage_(f"Added {entry.title}")
+        if warning:
+            self._show_error("Imported With Warnings", warning)
+            self.updateStatusMessage_(f"Added {entry.title} (see warning)")
+        else:
+            self.updateStatusMessage_(f"Added {entry.title}")
 
     @objc.python_method
     def launch_game_(self, entry: GameEntry) -> None:

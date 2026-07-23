@@ -10,7 +10,7 @@ from pathlib import Path
 
 from emulator.controller import controller_launch_args, ensure_controller_ready
 from emulator.game_library import GameEntry, GameLibrary
-from emulator.mame import find_mame_paths
+from emulator.mame import build_rompath, find_mame_paths
 from emulator.mame_config import mame_launch_args
 from emulator.paths import APP_NAME, saves_root
 from emulator.save_slots import SaveSlotManager
@@ -45,7 +45,7 @@ def run_game_entry(entry: GameEntry) -> int:
         str(paths.binary),
         entry.id,
         "-rompath",
-        str(entry.rompath),
+        build_rompath(entry.rompath),
         "-window",
         "-skip_gameinfo",
         "-homepath",

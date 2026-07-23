@@ -26,6 +26,7 @@ ROM_EXTENSIONS = {
     ".nv", ".key", ".dat", ".hex", ".s19", ".pal", ".pld", ".bprom",
 }
 MAME_LOCATION_SUFFIX = re.compile(r"^[a-z0-9]{1,8}$", re.IGNORECASE)
+EXTENSIONLESS_ROM = re.compile(r"^[a-z0-9][a-z0-9_-]*$", re.IGNORECASE)
 NON_ROM_EXTENSIONS = {
     "txt", "pdf", "png", "jpg", "jpeg", "gif", "bmp", "md", "nfo", "exe",
     "dll", "so", "dylib", "html", "htm", "url", "dmg", "doc", "rtf", "xml",
@@ -86,6 +87,10 @@ def is_rom_file(path: Path) -> bool:
         if label not in NON_ROM_EXTENSIONS and MAME_LOCATION_SUFFIX.match(label):
             return True
 
+    # Extensionless ROM names like buf1, ioa1, prg2, rom1
+    if "." not in path.name and EXTENSIONLESS_ROM.match(path.name):
+        return True
+
     return False
 
 
@@ -107,7 +112,7 @@ def collect_rom_files(folder: Path) -> list[Path]:
             continue
         if path.name in SKIP_DIR_NAMES or path.name.startswith("."):
             continue
-        for subpath in path.iterdir():
+        for subpath in path.rglob("*"):
             if subpath.is_file():
                 add(subpath)
 

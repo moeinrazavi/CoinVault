@@ -100,7 +100,7 @@ class GameLibrary:
         self,
         folder: Path,
         progress: Callable[[str], None] | None = None,
-    ) -> GameEntry:
+    ) -> tuple[GameEntry, str | None]:
         def update(message: str) -> None:
             if progress:
                 progress(message)
@@ -142,7 +142,12 @@ class GameLibrary:
                 raise RuntimeError("No ROM files found in the dropped folder")
 
             update("Organizing ROM set...")
-            install_rom_folder(source_dir, game_id, rompath)
+            import_warning = install_rom_folder(
+                source_dir,
+                game_id,
+                rompath,
+                library_root=games_root(),
+            )
 
             info = get_game_info(game_id)
             update("Fetching artwork...")
@@ -167,7 +172,7 @@ class GameLibrary:
             )
             self._save_index(entries, metadata)
             (saves_root() / game_id).mkdir(parents=True, exist_ok=True)
-            return entries[game_id]
+            return entries[game_id], import_warning
 
     def refresh_game_icon(
         self,
@@ -240,7 +245,8 @@ class GameLibrary:
         entry = self.get_game(game_id)
         if entry is None:
             return False, "Game not found"
-        return verify_game(game_id, entry.rompath)
+        ok, message, _output = verify_game(game_id, entry.rompath)
+        return ok, message
 
 
 def _write_placeholder_icon(icon_path: Path, title: str) -> None:
