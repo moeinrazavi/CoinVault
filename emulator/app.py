@@ -301,6 +301,12 @@ class AppDelegate(AppKit.NSObject):
         self.updateStatusMessage_(
             "Double-click a game to play. Use Controller Setup to map keyboard keys."
         )
+        if self.library.artwork_needs_refresh():
+            self.updateStatusMessage_("Updating library artwork...")
+            threading.Thread(
+                target=self._refresh_artwork_worker,
+                daemon=True,
+            ).start()
 
     @objc.python_method
     def _build_menu_bar(self) -> None:
@@ -408,6 +414,38 @@ class AppDelegate(AppKit.NSObject):
         alert.setMessageText_(title)
         alert.setInformativeText_(message)
         alert.runModal()
+
+    @objc.python_method
+    def _refresh_artwork_worker(self) -> None:
+        try:
+            def progress(message: str) -> None:
+                AppHelper.callAfter(self.updateStatusMessage_, message)
+
+            updated = self.library.refresh_all_icons(progress=progress)
+            AppHelper.callAfter(
+                self._artwork_refresh_finished,
+                updated,
+                None,
+            )
+        except Exception as exc:
+            AppHelper.callAfter(self._artwork_refresh_finished, 0, exc)
+
+    @objc.python_method
+    def _artwork_refresh_finished(
+        self,
+        updated: int,
+        error: Exception | None,
+    ) -> None:
+        if error is not None:
+            _log(traceback.format_exc())
+            self.updateStatusMessage_("Artwork update failed")
+            return
+
+        self.reload_library_()
+        if updated:
+            self.updateStatusMessage_(f"Updated artwork for {updated} games")
+        else:
+            self.updateStatusMessage_("Library artwork is up to date")
 
     @objc.python_method
     def import_folder_(self, folder: Path) -> None:

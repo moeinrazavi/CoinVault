@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from emulator.game_id import choose_best_game, collect_rom_files
-from emulator.icon_capture import capture_icon
+from emulator.icon_capture import ARTWORK_VERSION, capture_icon
 from emulator.mame import get_game_info, verify_game
 from emulator.paths import games_root, library_index_path, saves_root
 from emulator.rom_installer import install_rom_folder
@@ -44,28 +44,46 @@ class GameLibrary:
     def __init__(self) -> None:
         self._lock = threading.Lock()
 
-    def _load_index(self) -> dict[str, GameEntry]:
+    def _load_raw_index(self) -> tuple[dict, dict[str, GameEntry]]:
         index_path = library_index_path()
+        metadata: dict = {}
         if not index_path.exists():
-            return {}
+            return metadata, {}
 
         with index_path.open("r", encoding="utf-8") as handle:
             raw = json.load(handle)
 
+        if isinstance(raw, dict) and "games" in raw:
+            metadata = {key: value for key, value in raw.items() if key != "games"}
+            raw_games = raw.get("games", [])
+        else:
+            raw_games = raw if isinstance(raw, list) else []
+
         entries: dict[str, GameEntry] = {}
-        for item in raw.get("games", []):
+        for item in raw_games:
             entry = GameEntry(**item)
             entries[entry.id] = entry
+        return metadata, entries
+
+    def _load_index(self) -> dict[str, GameEntry]:
+        _, entries = self._load_raw_index()
         return entries
 
-    def _save_index(self, entries: dict[str, GameEntry]) -> None:
+    def _save_index(
+        self,
+        entries: dict[str, GameEntry],
+        metadata: dict | None = None,
+    ) -> None:
         index_path = library_index_path()
-        payload = {
-            "games": [asdict(entry) for entry in sorted(
+        payload = dict(metadata or {})
+        payload["artwork_version"] = ARTWORK_VERSION
+        payload["games"] = [
+            asdict(entry)
+            for entry in sorted(
                 entries.values(),
                 key=lambda game: game.title.lower(),
-            )]
-        }
+            )
+        ]
         with index_path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
             handle.write("\n")
@@ -100,7 +118,7 @@ class GameLibrary:
         update(f"Detected {identified.title}")
 
         with self._lock:
-            entries = self._load_index()
+            metadata, entries = self._load_raw_index()
             if game_id in entries:
                 raise RuntimeError(f"{entries[game_id].title} is already in your library")
 
@@ -127,12 +145,18 @@ class GameLibrary:
             install_rom_folder(source_dir, game_id, rompath)
 
             info = get_game_info(game_id)
-            update("Capturing icon...")
-            if not capture_icon(game_id, rompath, icon_path):
-                icon_path = game_dir / "icon.png"
+            update("Fetching artwork...")
+            if not capture_icon(
+                game_id,
+                rompath,
+                icon_path,
+                title=info["title"],
+                source_dirs=[folder, source_dir, game_dir],
+                cloneof=info.get("cloneof", ""),
+            ):
                 _write_placeholder_icon(icon_path, info["title"])
 
-            entry = GameEntry(
+            entries[game_id] = GameEntry(
                 id=game_id,
                 title=info["title"],
                 year=info.get("year", ""),
@@ -141,10 +165,59 @@ class GameLibrary:
                 icon="icon.png",
                 source_name=folder.name,
             )
-            entries[game_id] = entry
-            self._save_index(entries)
+            self._save_index(entries, metadata)
             (saves_root() / game_id).mkdir(parents=True, exist_ok=True)
-            return entry
+            return entries[game_id]
+
+    def refresh_game_icon(
+        self,
+        entry: GameEntry,
+        extra_dirs: list[Path] | None = None,
+    ) -> bool:
+        info = get_game_info(entry.id)
+        icon_path = games_root() / entry.id / entry.icon
+        source_dirs = [
+            *(extra_dirs or []),
+            entry.source_path,
+            games_root() / entry.id,
+        ]
+        if capture_icon(
+            entry.id,
+            entry.rompath,
+            icon_path,
+            title=info["title"],
+            source_dirs=source_dirs,
+            cloneof=info.get("cloneof", ""),
+        ):
+            return True
+
+        _write_placeholder_icon(icon_path, info["title"])
+        return False
+
+    def refresh_all_icons(
+        self,
+        progress: Callable[[str], None] | None = None,
+    ) -> int:
+        with self._lock:
+            metadata, entries = self._load_raw_index()
+
+        updated = 0
+        for entry in entries.values():
+            if progress:
+                progress(f"Updating artwork for {entry.title}...")
+            if self.refresh_game_icon(entry):
+                updated += 1
+
+        with self._lock:
+            metadata, current_entries = self._load_raw_index()
+            self._save_index(current_entries, metadata)
+        return updated
+
+    def artwork_needs_refresh(self) -> bool:
+        metadata, entries = self._load_raw_index()
+        if not entries:
+            return False
+        return metadata.get("artwork_version", 0) < ARTWORK_VERSION
 
     def remove_game(self, game_id: str) -> None:
         with self._lock:
